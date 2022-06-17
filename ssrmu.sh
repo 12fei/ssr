@@ -141,6 +141,7 @@ Get_User_info(){
 	fi
 	user_name=$(echo "${user_info_get}"|grep -w "user :"|awk -F "user : " '{print $NF}')
 	port=$(echo "${user_info_get}"|grep -w "port :"|sed 's/[[:space:]]//g'|awk -F ":" '{print $NF}')
+    ip=$(echo "${user_info_get}"|grep -w "ip :"|awk -F "ip : " '{print $NF}')
 	password=$(echo "${user_info_get}"|grep -w "passwd :"|awk -F "passwd : " '{print $NF}')
 	method=$(echo "${user_info_get}"|grep -w "method :"|sed 's/[[:space:]]//g'|awk -F ":" '{print $NF}')
 	protocol=$(echo "${user_info_get}"|grep -w "protocol :"|sed 's/[[:space:]]//g'|awk -F ":" '{print $NF}')
@@ -282,7 +283,7 @@ ss_link_qr(){
 	SSbase64=$(urlsafe_base64 "${method}:${password}@${ip}:${port}")
 	SSurl="ss://${SSbase64}"
 	SSQRcode="http://doub.pw/qr/qr.php?text=${SSurl}"
-	ss_link=" SS    链接 : ${Green_font_prefix}${SSurl}${Font_color_suffix} \n SS  二维码 : ${Green_font_prefix}${SSQRcode}${Font_color_suffix}"
+	ss_link=" SS    链接 : ${Green_font_prefix}${SSurl}${Font_color_suffix} "
 }
 ssr_link_qr(){
 	SSRprotocol=$(echo ${protocol} | sed 's/_compatible//g')
@@ -291,7 +292,7 @@ ssr_link_qr(){
 	SSRbase64=$(urlsafe_base64 "${ip}:${port}:${SSRprotocol}:${method}:${SSRobfs}:${SSRPWDbase64}")
 	SSRurl="ssr://${SSRbase64}"
 	SSRQRcode="http://doub.pw/qr/qr.php?text=${SSRurl}"
-	ssr_link=" SSR   链接 : ${Red_font_prefix}${SSRurl}${Font_color_suffix} \n SSR 二维码 : ${Red_font_prefix}${SSRQRcode}${Font_color_suffix} \n "
+	ssr_link=" SSR   链接 : ${Red_font_prefix}${SSRurl}${Font_color_suffix} "
 }
 ss_ssr_determine(){
 	protocol_suffix=`echo ${protocol} | awk -F "_" '{print $NF}'`
@@ -344,7 +345,7 @@ View_User(){
 	done
 }
 View_User_info(){
-	ip=$(cat ${config_user_api_file}|grep "SERVER_PUB_ADDR = "|awk -F "[']" '{print $2}')
+	# ip=$(cat ${config_user_api_file}|grep "SERVER_PUB_ADDR = "|awk -F "[']" '{print $2}')
 	[[ -z "${ip}" ]] && Get_IP
 	ss_ssr_determine
 	clear && echo "===================================================" && echo
@@ -365,9 +366,6 @@ View_User_info(){
 	echo -e " 用户总流量 : ${Green_font_prefix}${transfer_enable} ${Font_color_suffix}"
 	echo -e "${ss_link}"
 	echo -e "${ssr_link}"
-	echo -e " ${Green_font_prefix} 提示: ${Font_color_suffix}
- 在浏览器中，打开二维码链接，就可以看到二维码图片。
- 协议和混淆后面的[ _compatible ]，指的是 兼容原版协议/混淆。"
 	echo && echo "==================================================="
 }
 # 设置 配置信息
@@ -402,6 +400,27 @@ Set_config_password(){
 	read -e -p "(默认: doub.io):" ssr_password
 	[[ -z "${ssr_password}" ]] && ssr_password="doub.io"
 	echo && echo ${Separator_1} && echo -e "	密码 : ${Green_font_prefix}${ssr_password}${Font_color_suffix}" && echo ${Separator_1} && echo
+}
+Set_config_ip(){
+	echo "请输入用户配置中要显示的 服务器公网IP或域名 (当服务器有多个IP时，可以指定用户配置中显示的IP或者域名)"
+	read -e -p "(默认自动检测外网IP):" ssr_ip
+	if [[ -z "${ssr_ip}" ]]; then
+		Get_IP
+		if [[ ${ip} == "VPS_IP" ]]; then
+			while true
+			do
+			read -e -p "${Error} 自动检测外网IP失败，请手动输入服务器IP或域名" ssr_ip
+			if [[ -z "$ssr_ip" ]]; then
+				echo -e "${Error} 不能为空！"
+			else
+				break
+			fi
+			done
+		else
+			ssr_ip="${ip}"
+		fi
+	fi
+	echo && echo ${Separator_1} && echo -e "	IP或域名 : ${Green_font_prefix}${ssr_ip}${Font_color_suffix}" && echo ${Separator_1} && echo
 }
 Set_config_method(){
 	echo -e "请选择要设置的用户 加密方式
@@ -705,6 +724,7 @@ Set_user_api_server_pub_addr(){
 Set_config_all(){
 	lal=$1
 	if [[ "${lal}" == "Modify" ]]; then
+        Set_config_ip
 		Set_config_password
 		Set_config_method
 		Set_config_protocol
@@ -717,6 +737,7 @@ Set_config_all(){
 	else
 		Set_config_user
 		Set_config_port
+        Set_config_ip
 		Set_config_password
 		Set_config_method
 		Set_config_protocol
@@ -731,6 +752,14 @@ Set_config_all(){
 # 修改 配置信息
 Modify_config_password(){
 	match_edit=$(python mujson_mgr.py -e -p "${ssr_port}" -k "${ssr_password}"|grep -w "edit user ")
+	if [[ -z "${match_edit}" ]]; then
+		echo -e "${Error} 用户密码修改失败 ${Green_font_prefix}[端口: ${ssr_port}]${Font_color_suffix} " && exit 1
+	else
+		echo -e "${Info} 用户密码修改成功 ${Green_font_prefix}[端口: ${ssr_port}]${Font_color_suffix} (注意：可能需要十秒左右才会应用最新配置)"
+	fi
+}
+Modify_config_ip(){
+	match_edit=$(python mujson_mgr.py -e -p "${ssr_port}" -I "${ssr_password}"|grep -w "edit user ")
 	if [[ -z "${match_edit}" ]]; then
 		echo -e "${Error} 用户密码修改失败 ${Green_font_prefix}[端口: ${ssr_port}]${Font_color_suffix} " && exit 1
 	else
@@ -811,6 +840,7 @@ Modify_user_api_server_pub_addr(){
 	sed -i "s/SERVER_PUB_ADDR = '${server_pub_addr}'/SERVER_PUB_ADDR = '${ssr_server_pub_addr}'/" ${config_user_api_file}
 }
 Modify_config_all(){
+    Modify_config_ip
 	Modify_config_password
 	Modify_config_method
 	Modify_config_protocol
@@ -853,7 +883,7 @@ Debian_apt(){
 # 下载 ShadowsocksR
 Download_SSR(){
 	cd "/usr/local"
-	wget -N --no-check-certificate "https://github.com/ToyoDAdoubiBackup/shadowsocksr/archive/manyuser.zip"
+	wget -N --no-check-certificate "https://github.com/12fei/ssr/raw/master/manyuser.zip"
 	#git config --global http.sslVerify false
 	#env GIT_SSL_NO_VERIFY=true git clone -b manyuser https://github.com/ToyoDAdoubiBackup/shadowsocksr.git
 	#[[ ! -e ${ssr_folder} ]] && echo -e "${Error} ShadowsocksR服务端 下载失败 !" && exit 1
@@ -932,7 +962,7 @@ Install_SSR(){
 	check_root
 	[[ -e ${ssr_folder} ]] && echo -e "${Error} ShadowsocksR 文件夹已存在，请检查( 如安装失败或者存在旧版本，请先卸载 ) !" && exit 1
 	echo -e "${Info} 开始设置 ShadowsocksR账号配置..."
-	Set_user_api_server_pub_addr
+	# Set_user_api_server_pub_addr
 	Set_config_all
 	echo -e "${Info} 开始安装/配置 ShadowsocksR依赖..."
 	Installation_dependency
@@ -1184,6 +1214,12 @@ Modify_Config(){
 		Add_port_user
 	elif [[ ${ssr_modify} == "2" ]]; then
 		Del_port_user
+	elif [[ ${ssr_modify} == "13" ]]; then
+        Modify_port
+		Set_config_ip
+		Modify_config_ip
+		# Set_user_api_server_pub_addr "Modify"
+		# Modify_user_api_server_pub_addr
 	elif [[ ${ssr_modify} == "3" ]]; then
 		Modify_port
 		Set_config_password
@@ -1224,9 +1260,9 @@ Modify_Config(){
 		Modify_port
 		Set_config_all "Modify"
 		Modify_config_all
-	elif [[ ${ssr_modify} == "13" ]]; then
-		Set_user_api_server_pub_addr "Modify"
-		Modify_user_api_server_pub_addr
+	# elif [[ ${ssr_modify} == "13" ]]; then
+	# 	Set_user_api_server_pub_addr "Modify"
+	# 	Modify_user_api_server_pub_addr
 	else
 		echo -e "${Error} 请输入正确的数字(1-13)" && exit 1
 	fi
@@ -1252,7 +1288,7 @@ List_port_user(){
 Add_port_user(){
 	lalal=$1
 	if [[ "$lalal" == "install" ]]; then
-		match_add=$(python mujson_mgr.py -a -u "${ssr_user}" -p "${ssr_port}" -k "${ssr_password}" -m "${ssr_method}" -O "${ssr_protocol}" -G "${ssr_protocol_param}" -o "${ssr_obfs}" -s "${ssr_speed_limit_per_con}" -S "${ssr_speed_limit_per_user}" -t "${ssr_transfer}" -f "${ssr_forbid}"|grep -w "add user info")
+		match_add=$(python mujson_mgr.py -a -u "${ssr_user}" -p "${ssr_port}" -I "${ssr_ip}" -k "${ssr_password}" -m "${ssr_method}" -O "${ssr_protocol}" -G "${ssr_protocol_param}" -o "${ssr_obfs}" -s "${ssr_speed_limit_per_con}" -S "${ssr_speed_limit_per_user}" -t "${ssr_transfer}" -f "${ssr_forbid}"|grep -w "add user info")
 	else
 		while true
 		do
@@ -1261,7 +1297,10 @@ Add_port_user(){
 			[[ ! -z "${match_port}" ]] && echo -e "${Error} 该端口 [${ssr_port}] 已存在，请勿重复添加 !" && exit 1
 			match_username=$(python mujson_mgr.py -l|grep -w "user \[${ssr_user}]")
 			[[ ! -z "${match_username}" ]] && echo -e "${Error} 该用户名 [${ssr_user}] 已存在，请勿重复添加 !" && exit 1
-			match_add=$(python mujson_mgr.py -a -u "${ssr_user}" -p "${ssr_port}" -k "${ssr_password}" -m "${ssr_method}" -O "${ssr_protocol}" -G "${ssr_protocol_param}" -o "${ssr_obfs}" -s "${ssr_speed_limit_per_con}" -S "${ssr_speed_limit_per_user}" -t "${ssr_transfer}" -f "${ssr_forbid}"|grep -w "add user info")
+            echo -e "${ssr_port}"
+			match_add=$(python mujson_mgr.py -a -u "${ssr_user}" -p "${ssr_port}" -I "${ssr_ip}" -k "${ssr_password}" -m "${ssr_method}" -O "${ssr_protocol}" -G "${ssr_protocol_param}" -o "${ssr_obfs}" -s "${ssr_speed_limit_per_con}" -S "${ssr_speed_limit_per_user}" -t "${ssr_transfer}" -f "${ssr_forbid}"|grep -w "add user info")
+            echo -e "mujson_mgr.py -a -u \"${ssr_user}\" -p \"${ssr_port}\" -I \"${ssr_ip}\" -k \"${ssr_password}\" -m \"${ssr_method}\" -O \"${ssr_protocol}\" -G \"${ssr_protocol_param}\" -o \"${ssr_obfs}\" -s \"${ssr_speed_limit_per_con}\" -S \"${ssr_speed_limit_per_user}\" -t \"${ssr_transfer}\" -f \"${ssr_forbid}\""
+            echo -e "${match_add}"
 			if [[ -z "${match_add}" ]]; then
 				echo -e "${Error} 用户添加失败 ${Green_font_prefix}[用户名: ${ssr_user} , 端口: ${ssr_port}]${Font_color_suffix} "
 				break
@@ -1270,15 +1309,18 @@ Add_port_user(){
 				Save_iptables
 				echo -e "${Info} 用户添加成功 ${Green_font_prefix}[用户名: ${ssr_user} , 端口: ${ssr_port}]${Font_color_suffix} "
 				echo
-				read -e -p "是否继续 添加用户配置？[Y/n]:" addyn
-				[[ -z ${addyn} ]] && addyn="y"
-				if [[ ${addyn} == [Nn] ]]; then
-					Get_User_info "${ssr_port}"
-					View_User_info
-					break
-				else
-					echo -e "${Info} 继续 添加用户配置..."
-				fi
+                Get_User_info "${ssr_port}"
+				View_User_info
+				break
+				# read -e -p "是否继续 添加用户配置？[Y/n]:" addyn
+				# [[ -z ${addyn} ]] && addyn="y"
+				# if [[ ${addyn} == [Nn] ]]; then
+				# 	Get_User_info "${ssr_port}"
+				# 	View_User_info
+				# 	break
+				# else
+				# 	echo -e "${Info} 继续 添加用户配置..."
+				# fi
 			fi
 		done
 	fi
